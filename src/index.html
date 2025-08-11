@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>GitHub Repo Viewer — Minimal Premium</title>
+<meta name="description" content="Minimal premium UI to scan GitHub repos, select multiple and inspect details in a modal."/>
+<style>
+  /* ------------------------
+     BASE / RESET / THEME
+     ------------------------*/
+  :root{
+    --bg: #f7fafc;
+    --surface: #ffffff;
+    --muted: #54607a;
+    --accent: #2563eb;
+    --accent-weak: #dbeafe;
+    --danger: #dc2626;
+    --radius: 12px;
+    --shadow-1: 0 6px 18px rgba(20,28,48,0.08);
+    --shadow-2: 0 20px 40px rgba(20,28,48,0.10);
+    --glass: rgba(255,255,255,0.6);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:#0f1724;
+    font-family: system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    padding:28px;
+    display:flex;
+    justify-content:center;
+    align-items:flex-start;
+  }
+
+  /* ------------------------
+     APP LAYOUT
+     ------------------------*/
+  .app {
+    width:100%;
+    max-width:980px;
+    border-radius:18px;
+    background:linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,255,255,0.99));
+    box-shadow: var(--shadow-2);
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+  }
+
+  header.top {
+    padding:20px 22px;
+    display:flex;
+    gap:16px;
+    align-items:center;
+    border-bottom:1px solid rgba(15,23,36,0.04);
+  }
+  .brand {
+    display:flex;
+    gap:12px;
+    align-items:center;
+  }
+  .logo {
+    width:46px;height:46px;border-radius:10px;
+    display:grid;place-items:center;color:white;font-weight:700;
+    background:linear-gradient(135deg,var(--accent), #7c3aed);
+    box-shadow: 0 6px 18px rgba(37,99,235,0.12);
+    font-size:24px;
+  }
+  .brand-title { font-size:16px; font-weight:700; letter-spacing:0.2px }
+  .brand-sub { font-size:12px; color:var(--muted) }
+
+  .controls {
+    margin-left:auto;
+    display:flex;
+    gap:10px;
+    align-items:center;
+  }
+
+  /* inputs & buttons */
+  input[type="password"], button, input[type="search"] {
+    border-radius:10px;
+    border:1px solid rgba(15,23,36,0.06);
+    padding:10px 12px;
+    background:var(--surface);
+    color:inherit;
+    font-size:14px;
+  }
+
+  input[type="password"]{
+    min-width:220px;
+  }
+
+  .btn {
+    background:var(--accent);
+    color:white;
+    border:none;
+    padding:10px 12px;
+    cursor:pointer;
+    border-radius:10px;
+    display:inline-flex;align-items:center;gap:8px;
+    box-shadow: 0 8px 20px rgba(37,99,235,0.12);
+    transition: transform .12s ease, box-shadow .12s;
+    font-weight:600;
+  }
+  .btn:active{ transform: translateY(1px) }
+  .btn.secondary {
+    background:transparent;color:var(--muted);border:1px solid rgba(15,23,36,0.05);box-shadow:none;font-weight:600;
+  }
+  .btn[disabled] { opacity:.5; cursor:not-allowed; transform:none; box-shadow:none }
+
+  .small {
+    font-size:13px; padding:8px 10px; border-radius:8px;
+  }
+
+  /* ------------------------
+     BODY: grid of repos + actions
+     ------------------------*/
+  .main {
+    padding:20px;
+    display:grid;
+    grid-template-columns: 1fr 420px;
+    gap:18px;
+  }
+  @media (max-width:980px){ .main { grid-template-columns: 1fr; } }
+
+  /* left column: repo cards */
+  .left {
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+
+  .search-row {
+    display:flex;gap:8px;align-items:center;
+  }
+  .search {
+    flex:1; display:flex; gap:8px; align-items:center;
+    border-radius:10px; padding:8px 10px; background:var(--surface);
+    border:1px solid rgba(15,23,36,0.04);
+  }
+  .search svg { opacity:.72 }
+  input[type="search"]{ border:0; outline:0; width:100%; font-size:14px; color:inherit }
+
+  .repo-grid {
+    display:grid;
+    grid-template-columns: repeat(auto-fill,minmax(200px,1fr));
+    gap:10px;
+    margin-top:4px;
+  }
+
+  .repo-card {
+    background:var(--surface);
+    border-radius:10px;
+    padding:12px;
+    box-shadow: var(--shadow-1);
+    border:2px solid transparent;
+    transition: transform .12s ease, border-color .12s, box-shadow .12s;
+    cursor:pointer;
+    display:flex; gap:10px; align-items:center;
+  }
+  .repo-card:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(12,20,36,0.08) }
+  .repo-card:focus { outline:2px solid rgba(37,99,235,0.16); outline-offset:2px; }
+  .repo-card.selected {
+    border-color: var(--accent-weak);
+    background: linear-gradient(180deg,#fff,#fbfdff);
+    box-shadow: 0 18px 40px rgba(37,99,235,0.06);
+    transform: translateY(-6px) scale(1.01);
+  }
+  .repo-icon { width:40px;height:40px;display:grid;place-items:center;border-radius:8px;background:var(--accent-weak); color:var(--accent); flex-shrink:0 }
+  .repo-meta { display:flex; flex-direction:column; gap:2px; min-width:0 }
+  .repo-name { font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .repo-sub { font-size:12px; color:var(--muted) }
+
+  /* right column: actions & status */
+  .right {
+    display:flex;flex-direction:column;gap:12px;
+  }
+  .panel {
+    background:var(--surface); padding:12px; border-radius:12px; box-shadow:var(--shadow-1);
+  }
+  .status { font-size:13px; color:var(--muted); }
+
+  /* footer actions inside right column */
+  .actions { display:flex; gap:8px; align-items:center; margin-top:6px; }
+  .count-badge { background:var(--accent-weak); color:var(--accent); padding:6px 10px; border-radius:999px; font-weight:700; font-size:13px }
+
+  /* ------------------------
+     TOAST (accessible)
+     ------------------------*/
+  .toast {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;      /* cambio da top a bottom */
+  min-width: 240px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #111827;
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(2,6,23,0.4);
+  transform: translateY(8px);  /* opzionale: leggero spostamento verso il basso all'inizio */
+  opacity: 0;
+  transition: transform .2s ease, opacity .2s ease;
+  z-index: 120;
+}
+
+  .toast.show { transform: translateY(0); opacity:1 }
+
+  .toast.success { background: #064e3b }
+  .toast.error { background: #7f1d1d }
+
+  /* ------------------------
+     MODAL
+     ------------------------*/
+  .modal-backdrop {
+    position:fixed; inset:0; background: rgba(7,12,20,0.36); display:none; align-items:center; justify-content:center; z-index:110;
+  }
+  .modal-backdrop.show { display:flex; }
+  .modal {
+    width: min(880px,92%);
+    max-height: 84vh;
+    overflow:auto;
+    background:var(--surface);
+    border-radius:12px;
+    padding:18px;
+    box-shadow: var(--shadow-2);
+    transform: translateY(12px) scale(.99);
+    opacity:0;
+    transition: transform .18s cubic-bezier(.2,.9,.2,1), opacity .18s ease;
+  }
+  .modal-backdrop.show .modal{ transform: translateY(0) scale(1); opacity:1 }
+  .modal .modal-head { display:flex; align-items:center; gap:10px; }
+  .modal h2 { margin:0; font-size:18px }
+  .modal .meta { color:var(--muted); font-size:13px; margin-top:6px }
+  .modal pre {
+    margin-top:12px; background:#f3f4f6; padding:12px; border-radius:8px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;
+    font-size:13px; line-height:1.45;
+  }
+  .modal .close-btn {
+    margin-left:auto; border-radius:8px; padding:8px 10px; background:transparent;border:1px solid rgba(15,23,36,0.06);cursor:pointer;
+  }
+
+  /* small helpers */
+  .muted { color:var(--muted) }
+  .hr { height:1px;background:rgba(15,23,36,0.04);border-radius:2px;margin:12px 0 }
+</style>
+</head>
+<body>
+  <div class="app" role="application" aria-label="GitHub Repo Viewer">
+    <header class="top" aria-hidden="false">
+      <div class="brand" role="banner">
+        <div class="logo" aria-hidden="true">🔍</div>
+        <div>
+          <div class="brand-title">GitHub Scanner</div>
+        </div>
+      </div>
+
+      <div class="controls" role="region" aria-label="controls">
+        <input id="tokenInput" type="password" placeholder="Enter GitHub token" aria-label="GitHub token" />
+        <button id="loadBtn" class="btn" title="Load repositories"> 
+          <!-- inline search / cloud SVG -->
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="1.5"/></svg>
+          Load
+        </button>
+      </div>
+    </header>
+
+    <main class="main" role="main">
+      <section class="left">
+        <div class="search-row">
+          <div class="search" aria-hidden="false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><path d="M21 21l-4.35-4.35" stroke="#9aa7c0" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="11" r="6" stroke="#9aa7c0" stroke-width="1.3"/></svg>
+            <input id="searchInput" type="search" placeholder="Search owner or repository" aria-label="Search repositories" />
+          </div>
+          <button id="clearBtn" class="btn secondary small" title="Clear all selections">Clear</button>
+        </div>
+
+        <div id="repoGrid" class="repo-grid" aria-live="polite" aria-label="Repository list">
+          <!-- repo cards populated here -->
+          <div class="repo-card" style="pointer-events:none;opacity:.6">
+            <div class="repo-icon">📦</div>
+            <div class="repo-meta">
+              <div class="repo-name">Press Load</div>
+              <div class="repo-sub muted">Enter token and click Load</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="right" aria-label="actions and status">
+        <div class="panel">
+          <div class="status">Select repositories you want details for.</div>
+          <div class="hr"></div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <div class="count-badge" id="countBadge" aria-live="polite">0</div>
+            <div class="muted" style="font-size:13px">selected</div>
+          </div>
+          <div class="actions" style="margin-top:12px">
+            <button id="loadDetailsBtn" class="btn small" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Load Details
+            </button>
+            <button id="selectAllBtn" class="btn secondary small">Select All</button>
+          </div>
+          <div style="margin-top:12px" class="muted small" id="statusText">Ready</div>
+        </div>
+        <div class="panel" style="margin-top:6px">
+          <div style="font-weight:700">Tips</div>
+          <div class="muted" style="margin-top:8px; font-size:13px">
+            • Click a card to select.<br>
+	    • Click again after details are loaded to open modal.<br>
+            • Use <kbd>Enter</kbd> to open a selected card, <kbd>Esc</kbd> to close modal.
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Modal -->
+  <div id="modalBackdrop" class="modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal" role="document" aria-labelledby="modalTitle">
+      <div class="modal-head">
+        <div style="display:flex;align-items:center;gap:10px">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v18M3 12h18" stroke="#0f1724" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <h2 id="modalTitle">Repository</h2>
+        </div>
+        <button id="modalClose" class="close-btn" aria-label="Close details (Esc)">Close</button>
+      </div>
+      <div id="modalBody" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+<script>
+/* ============================
+   Config & Stato
+   ============================ */
+const endpoint = 'http://localhost:4000/graphql';
+
+let repos = [];                  
+let filtered = [];               
+let selected = new Map();        
+let detailsCache = new Map();    
+let lastFocused = null;
+
+/* ============================
+   Helpers
+   ============================ */
+const el = id => document.getElementById(id);
+
+function toast(msg, type = 'info', ms = 3000) {
+  const t = el('toast');
+  t.textContent = msg;
+  t.className = `toast show ${type === 'error' ? 'error' : type === 'success' ? 'success' : ''}`;
+  setTimeout(() => t.className = 'toast', ms);
+}
+
+function makeKey(repo) {
+  return `${repo.owner.login}/${repo.name}`;
+}
+
+async function graphqlFetch(query, variables = {}, token = '') {
+  console.log('GraphQL Fetch called with:', { query, variables, tokenPresent: !!token });
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({ query, variables })
+    });
+    console.log('Response status:', res.status, res.statusText);
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('Network error response text:', errorText);
+      throw new Error(`Network error ${res.status} ${res.statusText}`);
+    }
+
+    const json = await res.json();
+    console.log('Response JSON:', json);
+
+    if (json.errors) {
+      console.error('GraphQL errors:', json.errors);
+      throw new Error(json.errors.map(e => e.message).join('; '));
+    }
+    return json.data;
+  } catch (err) {
+    console.error('graphqlFetch error:', err);
+    throw err;
+  }
+}
+
+/* ============================
+   Rendering
+   ============================ */
+const repoGrid = el('repoGrid');
+const countBadge = el('countBadge');
+const loadBtn = el('loadBtn');
+const loadDetailsBtn = el('loadDetailsBtn');
+const selectAllBtn = el('selectAllBtn');
+const clearBtn = el('clearBtn');
+const statusText = el('statusText');
+
+function renderRepos(list) {
+  repoGrid.innerHTML = '';
+
+  if (!list.length) {
+    repoGrid.innerHTML = `
+      <div class="repo-card no-repos" style="opacity: 0.6; pointer-events:none;">
+        <div class="repo-icon">📦</div>
+        <div class="repo-meta">
+          <div class="repo-name">No repositories</div>
+          <div class="repo-sub muted">Try another token</div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+
+  list.forEach(repo => {
+    const key = makeKey(repo);
+    const card = document.createElement('div');
+    card.className = 'repo-card';
+    card.tabIndex = 0;
+    if (selected.has(key)) card.classList.add('selected');
+
+    card.innerHTML = `
+      <div class="repo-icon" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round">
+          <path d="M12 2l6 3v6c0 5-4 9-6 11-2-2-6-6-6-11V5l6-3z"/>
+        </svg>
+      </div>
+      <div class="repo-meta">
+        <div class="repo-name" title="${key}">${key}</div>
+        <div class="repo-sub muted">${repo.size ?? '-'} KB • ${repo.isPrivate ? 'Private' : 'Public'}</div>
+      </div>`;
+
+    card.addEventListener('click', () => {
+      if (detailsCache.has(key)) {
+        openModal(detailsCache.get(key), card);
+      } else {
+        toggleSelect(repo, card);
+      }
+    });
+
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        card.click();
+      }
+    });
+
+    frag.appendChild(card);
+  });
+
+  repoGrid.appendChild(frag);
+}
+
+function updateCount() {
+  countBadge.textContent = selected.size.toString();
+  loadDetailsBtn.disabled = selected.size === 0;
+  statusText.textContent = selected.size === 0 ? 'Ready' : `${selected.size} selected`;
+}
+
+/* ============================
+   Selezione
+   ============================ */
+function toggleSelect(repo, cardEl) {
+  const key = makeKey(repo);
+  if (selected.has(key)) {
+    selected.delete(key);
+    cardEl.classList.remove('selected');
+  } else {
+    selected.set(key, repo);
+    cardEl.classList.add('selected');
+  }
+  updateCount();
+}
+
+/* ============================
+   Caricamento repositories
+   ============================ */
+loadBtn.addEventListener('click', async () => {
+  const token = el('tokenInput').value.trim();
+  if (!token) {
+    toast('Enter your GitHub token', 'error');
+    return;
+  }
+  loadBtn.disabled = true;
+  loadBtn.textContent = 'Loading…';
+  statusText.textContent = 'Loading repositories...';
+
+  const query = `
+    query ListRepos($developerToken: String!) {
+      listRepositories(developerToken: $developerToken) {
+        name
+        size
+        owner { login }
+      }
+    }
+  `;
+
+  try {
+    console.log('Starting repo list fetch...');
+    const data = await graphqlFetch(query, { developerToken: token }, token);
+    console.log('Repo list data:', data);
+    repos = (data.listRepositories || []).map(r => ({ ...r, size: r.size ?? 0 }));
+    filtered = [...repos];
+    selected.clear();
+    detailsCache.clear();
+    renderRepos(filtered);
+    updateCount();
+    toast(`Loaded ${repos.length} repositories`, 'success');
+  } catch (err) {
+    console.error('Error loading repositories:', err);
+    const errMsg = err.message || 'Failed to load repositories';
+    if (err.message && /401|Unauthorized|invalid token/i.test(err.message)) {
+      toast('Invalid token — please check permissions', 'error');
+    } else {
+      toast(errMsg, 'error');
+    }
+    repos = [];
+    filtered = [];
+    selected.clear();
+    detailsCache.clear();
+    renderRepos(filtered);
+    updateCount();
+  } finally {
+    loadBtn.disabled = false;
+    loadBtn.textContent = 'Load';
+    statusText.textContent = 'Ready';
+  }
+});
+
+/* ============================
+   Ricerca
+   ============================ */
+el('searchInput').addEventListener('input', (e) => {
+  const query = e.target.value.trim().toLowerCase();
+  filtered = repos.filter(r => makeKey(r).toLowerCase().includes(query));
+  renderRepos(filtered);
+});
+
+/* ============================
+   Select all / Clear selection
+   ============================ */
+selectAllBtn.addEventListener('click', () => {
+  filtered.forEach(repo => selected.set(makeKey(repo), repo));
+  renderRepos(filtered);
+  updateCount();
+});
+
+clearBtn.addEventListener('click', () => {
+  selected.clear();
+  renderRepos(filtered);
+  updateCount();
+});
+
+/* ============================
+   Caricamento dettagli (batch + fallback)
+   ============================ */
+loadDetailsBtn.addEventListener('click', async () => {
+  const token = el('tokenInput').value.trim();
+  if (!token) {
+    toast('Token required', 'error');
+    return;
+  }
+  if (selected.size === 0) return;
+
+  loadDetailsBtn.disabled = true;
+  loadDetailsBtn.textContent = 'Loading…';
+  statusText.textContent = 'Loading details...';
+
+  const repoList = Array.from(selected.values());
+  let details = null;
+
+  try {
+    const batchQuery = `
+      query ReposDetails($developerToken: String!, $repoNames: [String!]!) {
+        reposDetails(developerToken: $developerToken, repoNames: $repoNames) {
+          name
+          size
+          isPrivate
+          fileCount
+          ymlContent
+          activeWebhooks
+          owner { login }
+        }
+      }
+    `;
+
+    try {
+      console.log('Fetching batch details for repos:', repoList.map(r => r.name));
+      const data = await graphqlFetch(batchQuery, { developerToken: token, repoNames: repoList.map(r => r.name) }, token);
+      details = data.reposDetails;
+      console.log('Batch details response:', details);
+    } catch (batchErr) {
+      console.warn('Batch details fetch failed, fallback to single:', batchErr);
+      details = [];
+      for (const repo of repoList) {
+        try {
+          const singleQuery = `
+            query RepoDetails($developerToken: String!, $repoName: String!) {
+              repoDetails(developerToken: $developerToken, repoName: $repoName) {
+                name
+                size
+                isPrivate
+                fileCount
+                ymlContent
+                activeWebhooks
+                owner { login }
+              }
+            }
+          `;
+          console.log('Fetching single repo details:', repo.name);
+          const data = await graphqlFetch(singleQuery, { developerToken: token, repoName: repo.name }, token);
+          details.push(data.repoDetails);
+          console.log('Single repo details:', data.repoDetails);
+        } catch (innerErr) {
+          console.error(`Error loading details for ${repo.name}:`, innerErr);
+          details.push({
+            name: repo.name,
+            owner: repo.owner,
+            size: repo.size,
+            isPrivate: repo.isPrivate,
+            fileCount: '—',
+            ymlContent: `Error: ${innerErr.message}`,
+            activeWebhooks: []
+          });
+        }
+      }
+    }
+
+    details.forEach(d => detailsCache.set(makeKey(d), d));
+    toast('Details loaded — click a repo to open details', 'success', 3500);
+    statusText.textContent = 'Details ready — click a card to open';
+  } catch (err) {
+    console.error('Failed to load details:', err);
+    toast(`Failed to load details: ${err.message || ''}`, 'error');
+    statusText.textContent = 'Error loading details';
+  } finally {
+    loadDetailsBtn.disabled = false;
+    loadDetailsBtn.textContent = 'Load Details';
+    renderRepos(filtered);
+    updateCount();
+  }
+});
+
+/* ============================
+   Modal & focus trap
+   ============================ */
+const backdrop = el('modalBackdrop');
+const modalBody = el('modalBody');
+const modalClose = el('modalClose');
+
+function openModal(details, caller = document.activeElement) {
+  lastFocused = caller;
+  const title = `${details.owner.login}/${details.name}`;
+  el('modalTitle').textContent = title;
+
+  modalBody.innerHTML = `
+    <div style="display:flex;gap:12px;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-weight:700">${title}</div>
+        <div class="meta muted">
+          ${details.size ?? '-'} KB • ${details.isPrivate ? 'Private' : 'Public'} • Files: ${details.fileCount ?? '-'}
+        </div>
+      </div>
+    </div>
+    <div class="hr"></div>
+    <div style="margin-top:8px"><strong>Active webhooks:</strong> <span class="muted">${(details.activeWebhooks && details.activeWebhooks.length) ? details.activeWebhooks.join(', ') : 'None'}</span></div>
+    <div style="margin-top:12px"><strong>First YAML file content:</strong></div>
+    <pre>${escapeHtml(details.ymlContent || 'No YAML file found')}</pre>
+  `;
+
+  backdrop.classList.add('show');
+  backdrop.setAttribute('aria-hidden', 'false');
+  modalClose.focus();
+  document.body.style.overflow = 'hidden';
+}
+
+
+function closeModal() {
+  backdrop.classList.remove('show');
+  backdrop.setAttribute('aria-hidden', 'true');
+  modalBody.innerHTML = '';
+  document.body.style.overflow = '';
+  if (lastFocused) lastFocused.focus();
+}
+
+modalClose.addEventListener('click', closeModal);
+backdrop.addEventListener('click', e => {
+  if (e.target === backdrop) closeModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && backdrop.classList.contains('show')) closeModal();
+});
+
+/* Focus trap inside modal */
+document.addEventListener('focus', e => {
+  if (!backdrop.classList.contains('show')) return;
+  const modal = backdrop.querySelector('.modal');
+  if (modal && !modal.contains(e.target)) {
+    e.stopPropagation();
+    modalClose.focus();
+  }
+}, true);
+
+/* Keyboard: Enter or Space on repo card triggers click */
+repoGrid.addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ' ') && document.activeElement.classList.contains('repo-card')) {
+    e.preventDefault();
+    document.activeElement.click();
+  }
+});
+
+/* ============================
+   Utility
+   ============================ */
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/[&<>"']/g, s => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[s]);
+}
+
+/* ============================
+   Init
+   ============================ */
+updateCount();
+renderRepos([]);
+</script>
+
+
+</body>
+</html>
