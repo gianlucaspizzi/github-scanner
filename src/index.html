@@ -227,7 +227,6 @@
     padding:18px;
     box-shadow: var(--shadow-2);
     transform: translateY(12px) scale(.99);
-    opacity:0;
     transition: transform .18s cubic-bezier(.2,.9,.2,1), opacity .18s ease;
   }
   .modal-backdrop.show .modal{ transform: translateY(0) scale(1); opacity:1 }
@@ -335,16 +334,17 @@
     </div>
   </div>
 
+
 <script>
 /* ============================
    Config & Stato
    ============================ */
 const endpoint = 'http://localhost:4000/graphql';
 
-let repos = [];                  
-let filtered = [];               
-let selected = new Map();        
-let detailsCache = new Map();    
+let repos = [];
+let filtered = [];
+let selected = new Map();
+let detailsCache = new Map();
 let lastFocused = null;
 
 /* ============================
@@ -439,7 +439,7 @@ function renderRepos(list) {
       </div>
       <div class="repo-meta">
         <div class="repo-name" title="${key}">${key}</div>
-        <div class="repo-sub muted">${repo.size ?? '-'} KB • ${repo.isPrivate ? 'Private' : 'Public'}</div>
+        <div class="repo-sub muted">${repo.size ?? '-'} KB</div>
       </div>`;
 
     card.addEventListener('click', () => {
@@ -564,7 +564,7 @@ clearBtn.addEventListener('click', () => {
 });
 
 /* ============================
-   Caricamento dettagli (batch + fallback)
+   Caricamento dettagli (batch con fallback)
    ============================ */
 loadDetailsBtn.addEventListener('click', async () => {
   const token = el('tokenInput').value.trim();
@@ -583,8 +583,8 @@ loadDetailsBtn.addEventListener('click', async () => {
 
   try {
     const batchQuery = `
-      query ReposDetails($developerToken: String!, $repoNames: [String!]!) {
-        reposDetails(developerToken: $developerToken, repoNames: $repoNames) {
+      query ScanMultipleRepos($developerToken: String!, $repoNames: [String!]!) {
+        scanMultipleRepos(developerToken: $developerToken, repoNames: $repoNames) {
           name
           size
           isPrivate
@@ -599,7 +599,7 @@ loadDetailsBtn.addEventListener('click', async () => {
     try {
       console.log('Fetching batch details for repos:', repoList.map(r => r.name));
       const data = await graphqlFetch(batchQuery, { developerToken: token, repoNames: repoList.map(r => r.name) }, token);
-      details = data.reposDetails;
+      details = data.scanMultipleRepos;
       console.log('Batch details response:', details);
     } catch (batchErr) {
       console.warn('Batch details fetch failed, fallback to single:', batchErr);
@@ -643,105 +643,78 @@ loadDetailsBtn.addEventListener('click', async () => {
     statusText.textContent = 'Details ready — click a card to open';
   } catch (err) {
     console.error('Failed to load details:', err);
-    toast(`Failed to load details: ${err.message || ''}`, 'error');
-    statusText.textContent = 'Error loading details';
+    toast('Failed to load details: ' + err.message, 'error');
   } finally {
     loadDetailsBtn.disabled = false;
     loadDetailsBtn.textContent = 'Load Details';
-    renderRepos(filtered);
-    updateCount();
   }
 });
 
 /* ============================
-   Modal & focus trap
+   Modal dettagli (semplice)
    ============================ */
-const backdrop = el('modalBackdrop');
-const modalBody = el('modalBody');
-const modalClose = el('modalClose');
+const modal = el('modalBackdrop');
+const modalContent = el('modalBody');
+const modalCloseBtn = el('modalClose');
 
-function openModal(details, caller = document.activeElement) {
-  lastFocused = caller;
-  const title = `${details.owner.login}/${details.name}`;
-  el('modalTitle').textContent = title;
+function openModal(repoDetails, focusedCard) {
+  lastFocused = focusedCard || document.activeElement;
 
-  modalBody.innerHTML = `
-    <div style="display:flex;gap:12px;align-items:center;justify-content:space-between">
-      <div>
-        <div style="font-weight:700">${title}</div>
-        <div class="meta muted">
-          ${details.size ?? '-'} KB • ${details.isPrivate ? 'Private' : 'Public'} • Files: ${details.fileCount ?? '-'}
-        </div>
-      </div>
-    </div>
-    <div class="hr"></div>
-    <div style="margin-top:8px"><strong>Active webhooks:</strong> <span class="muted">${(details.activeWebhooks && details.activeWebhooks.length) ? details.activeWebhooks.join(', ') : 'None'}</span></div>
-    <div style="margin-top:12px"><strong>First YAML file content:</strong></div>
-    <pre>${escapeHtml(details.ymlContent || 'No YAML file found')}</pre>
+  const html = `
+    <h2 id="modalTitle">${makeKey(repoDetails)}</h2>
+    <p><strong>Size:</strong> ${repoDetails.size ?? '—'} KB</p>
+    <p><strong>Private:</strong> ${repoDetails.isPrivate ? 'Yes' : 'No'}</p>
+    <p><strong>Files (approx.):</strong> ${repoDetails.fileCount ?? '—'}</p>
+    <p><strong>Active Webhooks:</strong> ${repoDetails.activeWebhooks.length ? repoDetails.activeWebhooks.join(', ') : 'None'}</p>
+    <h3>YML Content</h3>
+    <pre style="max-height: 200px; overflow-y: auto; background: #f0f0f0; padding: 8px; border-radius: 4px; white-space: pre-wrap;">${repoDetails.ymlContent ?? 'No YAML file found'}</pre>
+    <button id="detailsClose" aria-label="Close details modal">Close</button>
   `;
 
-  backdrop.classList.add('show');
-  backdrop.setAttribute('aria-hidden', 'false');
-  modalClose.focus();
-  document.body.style.overflow = 'hidden';
-}
+  modalContent.innerHTML = html;
 
+  // Mostra modal
+  modal.style.display = 'flex';
+  modal.setAttribute('aria-hidden', 'false');
+
+  // Evento per chiudere la modal cliccando il bottone creato dinamicamente
+  document.getElementById('detailsClose').addEventListener('click', closeModal);
+
+  // Gestione tastiera (ESC)
+  modal.addEventListener('keydown', onModalKeyDown);
+
+  // Porta il focus dentro la modal
+  modal.focus();
+}
 
 function closeModal() {
-  backdrop.classList.remove('show');
-  backdrop.setAttribute('aria-hidden', 'true');
-  modalBody.innerHTML = '';
-  document.body.style.overflow = '';
+  modal.style.display = 'none';
+  modal.setAttribute('aria-hidden', 'true');
+  modalContent.innerHTML = '';
   if (lastFocused) lastFocused.focus();
+
+  modal.removeEventListener('keydown', onModalKeyDown);
 }
 
-modalClose.addEventListener('click', closeModal);
-backdrop.addEventListener('click', e => {
-  if (e.target === backdrop) closeModal();
-});
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && backdrop.classList.contains('show')) closeModal();
-});
-
-/* Focus trap inside modal */
-document.addEventListener('focus', e => {
-  if (!backdrop.classList.contains('show')) return;
-  const modal = backdrop.querySelector('.modal');
-  if (modal && !modal.contains(e.target)) {
-    e.stopPropagation();
-    modalClose.focus();
-  }
-}, true);
-
-/* Keyboard: Enter or Space on repo card triggers click */
-repoGrid.addEventListener('keydown', e => {
-  if ((e.key === 'Enter' || e.key === ' ') && document.activeElement.classList.contains('repo-card')) {
+// Chiudi modal con ESC
+function onModalKeyDown(e) {
+  if (e.key === 'Escape') {
     e.preventDefault();
-    document.activeElement.click();
+    closeModal();
   }
-});
-
-/* ============================
-   Utility
-   ============================ */
-function escapeHtml(str) {
-  if (!str) return '';
-  return str.replace(/[&<>"']/g, s => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;'
-  })[s]);
 }
+
+// Chiudi modal anche con il bottone statico in alto
+modalCloseBtn.addEventListener('click', closeModal);
 
 /* ============================
    Init
    ============================ */
-updateCount();
-renderRepos([]);
+document.addEventListener('DOMContentLoaded', () => {
+  updateCount();
+  renderRepos([]);
+});
 </script>
-
 
 </body>
 </html>

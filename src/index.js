@@ -120,7 +120,7 @@ const resolvers = {
       const query = `
         query {
           viewer {
-            repositories(first: 3, orderBy: {field: CREATED_AT, direction: DESC}) {
+            repositories(first: 10, orderBy: {field: CREATED_AT, direction: DESC}) {
               nodes {
                 name
                 diskUsage
